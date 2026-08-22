@@ -1,0 +1,68 @@
+{
+  "timezone": {
+    "description": "时区（IANA 名称）",
+    "type": "string",
+    "default": "Asia/Shanghai",
+    "hint": "早安/晚安时间窗口与每日 6 点清零均以此时区计算。服务器若为 UTC 务必保持默认值。"
+  },
+  "morning_words": {
+    "description": "早安触发词（逗号分隔）",
+    "type": "text",
+    "default": "早安,早,早上好,早好,起床,起床了,起床啦,起床咯,醒了,我醒了,good morning,gm,morning",
+    "hint": "默认整句匹配：消息 cleaned 后为「称呼+触发词+语气词」才触发，如「大家早安呀~」，避免「早饭」误触。"
+  },
+  "night_words": {
+    "description": "晚安触发词（逗号分隔）",
+    "type": "text",
+    "default": "晚安,睡觉,睡觉了,睡觉啦,睡觉咯,睡了,去睡了,去睡觉了,去睡觉啦,我睡了,我去睡了,困死了,睡了睡了,good night,goodnight,gn,night night",
+    "hint": "同上，整句匹配。注意「晚上好」是问候不是睡觉，默认不触发，可自行加入。"
+  },
+  "group_query_words": {
+    "description": "群作息查询触发词（逗号分隔）",
+    "type": "text",
+    "default": "群友作息",
+    "hint": "发送该词查询今日早晚安人数，如「今天已经有2位群友早安了，3位群友晚安了~」。整句匹配，只读不打卡。"
+  },
+  "self_query_words": {
+    "description": "个人作息查询触发词（逗号分隔）",
+    "type": "text",
+    "default": "我的作息",
+    "hint": "发送该词查询自己的作息数据（最近早晚安时间、本周/累计次数、累计睡眠时长）。整句匹配，只读不打卡。"
+  },
+  "fuzzy_match": {
+    "description": "模糊匹配（消息中包含触发词即触发）",
+    "type": "bool",
+    "default": false,
+    "hint": "默认关闭。开启后「今天大家都晚安了吗」也会触发，且可能与含问候词的指令冲突。"
+  },
+  "dup_night_hours": {
+    "description": "重复晚安提示窗口（小时）",
+    "type": "int",
+    "default": 6,
+    "hint": "距上次成功晚安不足该时长时回复“N小时内你已经晚安过了哦~”；超过该时长且仍在晚安时段内再次晚安，视为一次新的晚安。重复早安始终静默不理会。设为 0 可关闭重复判定。"
+  },
+  "enable_private": {
+    "description": "是否在私聊中生效",
+    "type": "bool",
+    "default": false,
+    "hint": "默认仅群聊生效（排名按群独立统计）。"
+  },
+  "pair_window_hours": {
+    "description": "早安睡眠时长的配对窗口（小时）",
+    "type": "int",
+    "default": 24,
+    "hint": "只有最近一次晚安距本次早安不超过该窗口，才计算睡眠时长；否则回复「早安～」。设为 24 表示只配对“昨晚”。"
+  },
+  "history_cap": {
+    "description": "每用户保留的打卡历史条数上限",
+    "type": "int",
+    "default": 30,
+    "hint": "历史仅用于统计与审计，封顶保存以限制文件体积与内存占用；0 为不保留历史（打卡与排名不受影响）。"
+  },
+  "prune_days": {
+    "description": "清理 N 天未打卡用户（0 = 永不清理）",
+    "type": "int",
+    "default": 0,
+    "hint": "为防止数据丢失默认永不清理。若群规模极大可设为如 180，仅清除长期完全不活跃的用户。"
+  }
+}

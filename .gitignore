@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+
+# 插件运行时数据（切勿上传群友打卡记录）
+data/
+*.corrupt-*
+*.tmp
+
+# IDE / 系统
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store
