@@ -484,7 +484,8 @@ class ZaowanPlugin(Star):
 
             if kind == "morning":
                 if not self._is_morning_time(now):
-                    return "现在不能早安哦，可以早安的时间为6时到12时~"
+                    # 回复带昵称：内容因人而异，避免被 replyguard 重复回复抑制吞掉
+                    return f"{name}，现在不能早安哦，可以早安的时间为6时到12时~"
                 if _to_float(u.get("last_goodmorning")) >= start_ts:
                     return None  # 重复早安：静默不理会（需求规定不回复）
                 gn = _to_float(u.get("last_goodnight"))
@@ -508,17 +509,17 @@ class ZaowanPlugin(Star):
                     )
                 self._append_history(u, now_ts, "m", None, None)
                 self._save_locked()
-                return "早安～"
+                return f"早安，{name}～"
 
             # ---- 晚安 ----
             if not self._is_night_time(now):
-                return "现在不能晚安哦，可以晚安的时间为21时到第二天早上6时~"
+                return f"{name}，现在不能晚安哦，可以晚安的时间为21时到第二天早上6时~"
             last_gn = _to_float(u.get("last_goodnight"))
             # 重复晚安：同一打卡日内、距上次成功晚安不足窗口时长（默认 6 小时）时提示，不记录不落盘。
             # “同一天”条件保证即使把窗口配置得很大，也绝不会把第二天晚上的新晚安误判为重复
             # （合法晚安时段内同晚两次晚安最大间隔 < 9h、跨晚最小间隔 > 15h）。
             if last_gn >= start_ts and (now_ts - last_gn) < self._dup_night_window:
-                return f"{self._dup_night_window // 3600}小时内你已经晚安过了哦~"
+                return f"{name}，{self._dup_night_window // 3600}小时内你已经晚安过了哦~"
             gm = _to_float(u.get("last_goodmorning"))
             # 今日（本打卡日 6 点后）有早安记录才计算清醒时长
             paired = start_ts <= gm <= now_ts
@@ -618,6 +619,12 @@ class ZaowanPlugin(Star):
             kind = self._match(getattr(event, "message_str", "") or "")
             if kind is None:
                 return  # 非早晚安消息：不做任何事，开销极小
+
+            # 命中打卡/查询词：禁止默认 LLM 处理本条消息，避免“@机器人 早安”时
+            # 打卡回复与 AI 回复重复发送。注意 should_call_llm 的参数含义是
+            # “是否禁止默认 LLM 请求”（AstrBot astr_message_event.py 的 docstring，
+            # ProcessStage 以 `not event.call_llm` 判定），True 才是拦截。
+            event.should_call_llm(True)
 
             sender_id = str(event.get_sender_id() or "unknown")
             sender_name = str(event.get_sender_name() or sender_id)
