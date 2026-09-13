@@ -139,6 +139,11 @@ class FakeEvent:
         self._uid = uid
         self._name = name
         self.results = []
+        self.llm_blocked = False
+
+    def should_call_llm(self, call_llm):
+        # AstrBot 语义：call_llm=True 表示禁止默认 LLM 请求本条消息
+        self.llm_blocked = call_llm
 
     def get_sender_id(self):
         return self._uid
@@ -197,6 +202,7 @@ def test_sample_scenario(tmp):
     p._now = lambda: T(2026, 8, 19, 22, 0, 0)
     drive(p, ev)
     assert text_of(ev) == "\u200b 晚安成功！你是今晚第1个睡觉的群友！", text_of(ev)
+    assert ev.llm_blocked, "打卡命中应禁止默认 LLM（should_call_llm(True)）"
 
     # 8-19 23:40:35 不是很懂晚安 -> 今晚第2个
     ev = FakeEvent("晚安", uid="20003", name="不是很懂")
@@ -216,7 +222,7 @@ def test_sample_scenario(tmp):
     ev = FakeEvent("早安", uid="20002", name="雾雨徊")
     p._now = lambda: T(2026, 8, 20, 8, 0, 0)
     drive(p, ev)
-    assert text_of(ev) == "\u200b 早安～", text_of(ev)
+    assert text_of(ev) == "\u200b 早安，雾雨徊～", text_of(ev)
 
     # 8-20 22:00 某人今晚再次晚安（新的一晚，排名已清零）-> 第1个
     ev = FakeEvent("晚安", uid="20001", name="某人")
@@ -236,11 +242,11 @@ def test_sample_scenario(tmp):
     ev = FakeEvent("早安", uid="20002", name="雾雨徊")
     p._now = lambda: T(2026, 8, 20, 15, 0, 0)
     drive(p, ev)
-    assert text_of(ev) == "\u200b 现在不能早安哦，可以早安的时间为6时到12时~", text_of(ev)
+    assert text_of(ev) == "\u200b 雾雨徊，现在不能早安哦，可以早安的时间为6时到12时~", text_of(ev)
 
     ev = FakeEvent("晚安", uid="20001", name="某人")
     drive(p, ev)
-    assert text_of(ev) == "\u200b 现在不能晚安哦，可以晚安的时间为21时到第二天早上6时~", text_of(ev)
+    assert text_of(ev) == "\u200b 某人，现在不能晚安哦，可以晚安的时间为21时到第二天早上6时~", text_of(ev)
 
 
 def test_dup_and_reset(tmp):
@@ -355,7 +361,7 @@ def test_boundaries(tmp):
 
     ev = FakeEvent("早安", uid="Y")
     drive(p, ev)
-    assert text_of(ev).endswith("早安～"), text_of(ev)
+    assert text_of(ev).endswith("早安，用户A～"), text_of(ev)
 
     p._now = lambda: T(2026, 8, 20, 11, 59, 59)
     ev = FakeEvent("早安", uid="Z")
@@ -382,7 +388,7 @@ def test_pair_window(tmp):
     p._now = lambda: T(2026, 8, 21, 8, 0, 0)
     ev = FakeEvent("早安", uid="P")
     drive(p, ev)
-    assert text_of(ev).endswith("早安～"), text_of(ev)
+    assert text_of(ev).endswith("早安，用户A～"), text_of(ev)
 
 
 def test_no_false_positive(tmp):
@@ -681,25 +687,33 @@ def test_query_upgrade_backfill(tmp):
     """旧版数据（无周计数字段）升级时从历史回填本周计数。"""
     f = tmp / "astrbot_plugin_zaowan" / "records.json"
     f.parent.mkdir(parents=True, exist_ok=True)
+    # 历史时间戳按「真实当前时间」所在周动态生成：加载阶段的回填比较的是
+    # 真实时钟的周界，写死日期会让测试随时间流逝而失效（过期教训）
+    base = datetime.now(TZ)
+    week_mon_6 = (base - timedelta(days=base.weekday())).replace(
+        hour=6, minute=0, second=0, microsecond=0
+    )
+    t_night = week_mon_6 + timedelta(days=2, hours=17)    # 周三 23:00
+    t_morning = week_mon_6 + timedelta(days=3, hours=1)   # 周四 07:00（睡 8 小时）
     f.write_text(json.dumps({
         "version": 1,
         "sessions": {"s1": {"users": {"u1": {
-            "name": "旧用户", "last_goodnight": T(2026, 8, 19, 23, 0, 0).timestamp(),
-            "last_goodmorning": T(2026, 8, 20, 7, 0, 0).timestamp(),
-            "last_paired_morning": T(2026, 8, 20, 7, 0, 0).timestamp(),
+            "name": "旧用户", "last_goodnight": t_night.timestamp(),
+            "last_goodmorning": t_morning.timestamp(),
+            "last_paired_morning": t_morning.timestamp(),
             "morning_total": 1, "night_total": 1,
             "paired_morning_total": 1, "paired_night_total": 0,
             "sleep_total": 28800.0, "awake_total": 0.0,
             "history": [
-                {"t": T(2026, 8, 19, 23, 0, 0).timestamp(), "k": "n", "r": 1, "d": None},
-                {"t": T(2026, 8, 20, 7, 0, 0).timestamp(), "k": "m", "r": 1, "d": 28800.0},
+                {"t": t_night.timestamp(), "k": "n", "r": 1, "d": None},
+                {"t": t_morning.timestamp(), "k": "m", "r": 1, "d": 28800.0},
             ],
-        }}}}
-    }), encoding="utf-8")
+        }}}}}
+    ), encoding="utf-8")
     p = make_plugin(tmp)
-    p._now = lambda: T(2026, 8, 20, 12, 0, 0)
+    p._now = lambda: datetime.now(TZ)
     u = p._records["sessions"]["s1"]["users"]["u1"]
-    # 8/19-8/20 都在本周（周一 8/17 6 点之后）-> 回填 1 早安 1 晚安
+    # 两条历史都在本周（周一 6 点之后）-> 回填 1 早安 1 晚安
     assert u["week_morning_total"] == 1, u
     assert u["week_night_total"] == 1, u
     ev = FakeEvent("我的作息", uid="u1")
